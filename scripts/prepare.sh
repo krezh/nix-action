@@ -55,7 +55,7 @@ if [ "${INPUT_REINSTALL:-false}" != "true" ] && existing_nix="$(find_existing_ni
     fi
   fi
 
-  installed_version="$("$existing_nix" --version 2>/dev/null | awk '{print $NF}' || printf 'unknown')"
+  installed_version="$("$existing_nix" --version 2>/dev/null | awk 'NR == 1 {print $NF}' || printf 'unknown')"
   elapsed_s="$(( $(date +%s) - start_ts ))"
 
   info "Nix is already installed at ${existing_nix} (${installed_version}); skipping installer."

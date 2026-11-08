@@ -182,6 +182,13 @@ fi
 
 info "Installing Lix ${version} (init=${effective_init})"
 "$installer_bin" "${install_args[@]}"
+
+if [ "$os_type" = "Linux" ] && [ "$effective_init" = "systemd" ]; then
+  run_root systemctl disable --now nix-daemon.socket >/dev/null 2>&1 || true
+  run_root systemctl stop 'nix-daemon@*.service' >/dev/null 2>&1 || true
+  run_root systemctl start nix-daemon.service
+fi
+
 propagate_nix_env
 
 nix_bin="$(command -v nix || true)"
@@ -190,7 +197,7 @@ if [ -z "$nix_bin" ] && [ -x /nix/var/nix/profiles/default/bin/nix ]; then
 fi
 [ -n "$nix_bin" ] || die "Lix installation completed but 'nix' binary was not found"
 
-installed_version="$("$nix_bin" --version 2>/dev/null | awk '{print $NF}' || printf '%s' "$version")"
+installed_version="$("$nix_bin" --version 2>/dev/null | awk 'NR == 1 {print $NF}' || printf '%s' "$version")"
 elapsed_s="$(( $(date +%s) - start_ts ))"
 
 write_gh_output "version" "$installed_version"

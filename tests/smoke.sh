@@ -90,7 +90,7 @@ skip_case="${TMP_ROOT}/skip"
 mkdir -p "${skip_case}/bin"
 cat >"${skip_case}/bin/nix" <<'EOF'
 #!/usr/bin/env bash
-echo "nix (Lix, like Nix) 2.96.0"
+printf 'nix (Lix, like Nix) 2.96.0\nSystem type: x86_64-linux\nFeatures: gc, signed-caches\n'
 EOF
 chmod +x "${skip_case}/bin/nix"
 
@@ -182,7 +182,7 @@ pkg_sha="$(sha256_file "$mock_tarball")"
 # Mock nix binary for post-install check + empty curl stub that fails if network is attempted
 cat >"${mock_bin}/nix" <<'EOF'
 #!/usr/bin/env bash
-echo "nix (Lix, like Nix) 2.96.0"
+printf 'nix (Lix, like Nix) 2.96.0\nSystem type: x86_64-linux\nFeatures: gc, signed-caches\n'
 EOF
 cat >"${mock_bin}/curl" <<'EOF'
 #!/usr/bin/env bash

@@ -41,7 +41,9 @@ if [ "$latest_flag" = "true" ]; then
   tags_json="${tmp_dir}/tags.json"
   download_file "https://git.lix.systems/api/v1/repos/lix-project/lix/tags?limit=25" "$tags_json"
   target_lix_version="$(jq -r '[.[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))][0]' "$tags_json")"
-  [ -n "$target_lix_version" ] && [ "$target_lix_version" != "null" ] || die "Failed to resolve latest Lix version"
+  if [ -z "$target_lix_version" ] || [ "$target_lix_version" = "null" ]; then
+    die "Failed to resolve latest Lix version"
+  fi
 fi
 
 lix_version="${target_lix_version:-$LIX_VERSION}"

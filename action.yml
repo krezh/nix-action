@@ -93,8 +93,14 @@ runs:
     - name: Prepare installation
       id: prepare
       shell: bash
-      run: bash "${{ github.action_path }}/scripts/prepare.sh"
+      run: |
+        action_dir="${GITHUB_ACTION_PATH}"
+        if [ ! -d "$action_dir" ] && [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+          action_dir="${GITHUB_WORKSPACE}"
+        fi
+        bash "${action_dir}/scripts/prepare.sh"
       env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
         INPUT_DISTRIBUTION: ${{ inputs.distribution }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_INSTALLER_VERSION: ${{ inputs.installer-version }}
@@ -124,8 +130,14 @@ runs:
       id: install
       if: steps.prepare.outputs.skip != 'true'
       shell: bash
-      run: bash "${{ github.action_path }}/scripts/install.sh"
+      run: |
+        action_dir="${GITHUB_ACTION_PATH}"
+        if [ ! -d "$action_dir" ] && [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+          action_dir="${GITHUB_WORKSPACE}"
+        fi
+        bash "${action_dir}/scripts/install.sh"
       env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
         PREPARED_DISTRIBUTION: ${{ steps.prepare.outputs.distribution }}
         PREPARED_SYSTEM: ${{ steps.prepare.outputs.system }}
         PREPARED_VERSION: ${{ steps.prepare.outputs.version }}
