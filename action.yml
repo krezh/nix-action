@@ -1,0 +1,153 @@
+name: nix-action
+description: Install Nix (Lix) with cached installer and tarball artifacts.
+
+inputs:
+  distribution:
+    description: Nix distribution to install (currently supports lix).
+    required: false
+    default: lix
+  version:
+    description: Lix version to install (defaults to pinned version in distributions/lix.env).
+    required: false
+  installer-version:
+    description: lix-installer version to use (defaults to pinned version in distributions/lix.env).
+    required: false
+  installer-url:
+    description: Override URL to the installer binary.
+    required: false
+  package-url:
+    description: Override URL or local path to the distribution tarball.
+    required: false
+  github-token:
+    description: GitHub token added to extra-access-tokens for authenticated flake/source fetches.
+    required: false
+    default: ${{ github.token }}
+  github-server-url:
+    description: GitHub server hostname/URL paired with github-token.
+    required: false
+    default: ${{ github.server_url }}
+  extra-conf:
+    description: Extra configuration lines for /etc/nix/nix.conf.
+    required: false
+  substituters:
+    description: Space- or newline-separated substituter URLs appended via extra-substituters.
+    required: false
+  trusted-public-keys:
+    description: Space- or newline-separated signing keys appended via extra-trusted-public-keys.
+    required: false
+  nix-path:
+    description: Value exported as NIX_PATH and configured via nix-path.
+    required: false
+  init:
+    description: Init system to configure on Linux/macOS (auto, systemd, launchd, none).
+    required: false
+    default: auto
+  kvm:
+    description: Enable /dev/kvm permissions on Linux when available.
+    required: false
+    default: "true"
+  trust-runner-user:
+    description: Add the current runner user to trusted-users.
+    required: false
+    default: "true"
+  modify-profile:
+    description: Modify shell profile files to load Nix automatically.
+    required: false
+    default: "true"
+  reinstall:
+    description: Reinstall even if Nix/Lix is already present on the runner.
+    required: false
+    default: "false"
+  cache-installer:
+    description: Cache the installer binary and distribution tarball via actions/cache.
+    required: false
+    default: "true"
+  extra-args:
+    description: Extra arguments passed to lix-installer install.
+    required: false
+  summary:
+    description: Write installation summary to GITHUB_STEP_SUMMARY.
+    required: false
+    default: "true"
+
+outputs:
+  version:
+    description: Installed Nix/Lix version.
+    value: ${{ steps.prepare.outputs.skip == 'true' && steps.prepare.outputs.version || steps.install.outputs.version }}
+  distribution:
+    description: Installed distribution name.
+    value: ${{ steps.prepare.outputs.distribution }}
+  cache-hit:
+    description: Installer/tarball cache outcome (true, partial, false, or skipped).
+    value: ${{ steps.prepare.outputs.skip == 'true' && steps.prepare.outputs.cache-hit || steps.install.outputs.cache-hit }}
+  skipped:
+    description: Whether installation was skipped because Nix/Lix was already present.
+    value: ${{ steps.prepare.outputs.skipped || 'false' }}
+  nix-path:
+    description: Path to the installed nix binary.
+    value: ${{ steps.prepare.outputs.skip == 'true' && steps.prepare.outputs.nix-path || steps.install.outputs.nix-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare installation
+      id: prepare
+      shell: bash
+      run: bash "${{ github.action_path }}/scripts/prepare.sh"
+      env:
+        INPUT_DISTRIBUTION: ${{ inputs.distribution }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_INSTALLER_VERSION: ${{ inputs.installer-version }}
+        INPUT_INSTALLER_URL: ${{ inputs.installer-url }}
+        INPUT_PACKAGE_URL: ${{ inputs.package-url }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_GITHUB_SERVER_URL: ${{ inputs.github-server-url }}
+        INPUT_EXTRA_CONF: ${{ inputs.extra-conf }}
+        INPUT_SUBSTITUTERS: ${{ inputs.substituters }}
+        INPUT_TRUSTED_PUBLIC_KEYS: ${{ inputs.trusted-public-keys }}
+        INPUT_NIX_PATH: ${{ inputs.nix-path }}
+        INPUT_KVM: ${{ inputs.kvm }}
+        INPUT_TRUST_RUNNER_USER: ${{ inputs.trust-runner-user }}
+        INPUT_REINSTALL: ${{ inputs.reinstall }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+
+    - name: Cache installer and tarball
+      id: cache
+      if: steps.prepare.outputs.skip != 'true' && inputs.cache-installer == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.prepare.outputs.cache-dir }}
+        key: ${{ steps.prepare.outputs.cache-key }}
+        restore-keys: ${{ steps.prepare.outputs.restore-key }}
+
+    - name: Install Nix
+      id: install
+      if: steps.prepare.outputs.skip != 'true'
+      shell: bash
+      run: bash "${{ github.action_path }}/scripts/install.sh"
+      env:
+        PREPARED_DISTRIBUTION: ${{ steps.prepare.outputs.distribution }}
+        PREPARED_SYSTEM: ${{ steps.prepare.outputs.system }}
+        PREPARED_VERSION: ${{ steps.prepare.outputs.version }}
+        PREPARED_INSTALLER_VERSION: ${{ steps.prepare.outputs.installer-version }}
+        PREPARED_TARBALL_SHA256: ${{ steps.prepare.outputs.tarball-sha256 }}
+        PREPARED_INSTALLER_SHA256: ${{ steps.prepare.outputs.installer-sha256 }}
+        PREPARED_CACHE_DIR: ${{ steps.prepare.outputs.cache-dir }}
+        PREPARED_START_TS: ${{ steps.prepare.outputs.start-ts }}
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        INPUT_INSTALLER_URL: ${{ inputs.installer-url }}
+        INPUT_PACKAGE_URL: ${{ inputs.package-url }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_GITHUB_SERVER_URL: ${{ inputs.github-server-url }}
+        INPUT_EXTRA_CONF: ${{ inputs.extra-conf }}
+        INPUT_SUBSTITUTERS: ${{ inputs.substituters }}
+        INPUT_TRUSTED_PUBLIC_KEYS: ${{ inputs.trusted-public-keys }}
+        INPUT_NIX_PATH: ${{ inputs.nix-path }}
+        INPUT_INIT: ${{ inputs.init }}
+        INPUT_KVM: ${{ inputs.kvm }}
+        INPUT_TRUST_RUNNER_USER: ${{ inputs.trust-runner-user }}
+        INPUT_MODIFY_PROFILE: ${{ inputs.modify-profile }}
+        INPUT_REINSTALL: ${{ inputs.reinstall }}
+        INPUT_CACHE_INSTALLER: ${{ inputs.cache-installer }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+        INPUT_SUMMARY: ${{ inputs.summary }}

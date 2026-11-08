@@ -1,0 +1,162 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Unit Smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate configs and shell scripts
+        run: |
+          shellcheck -x scripts/*.sh .github/scripts/*.sh tests/*.sh
+          jq empty release-please-config.json .release-please-manifest.json .renovaterc.json5
+          yq '.' action.yml >/dev/null
+          bash tests/smoke.sh
+
+  test:
+    name: Install Lix (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - ubuntu-22.04
+          - ubuntu-24.04-arm
+          - macos-15
+          - macos-26
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Lix
+        id: lix
+        uses: ./
+        with:
+          substituters: https://cache.lix.systems
+          trusted-public-keys: cache.lix.systems:aBnZUw8zA7H35Cz2RyKFVs3H4PlGTLawyY5KRbvJR8o=
+          extra-conf: |
+            extra-access-tokens = example.com=lix-gha-installer-extra-config-works
+
+      - name: Verify installation and config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.lix.outputs.distribution }}" = "lix"
+          test "${{ steps.lix.outputs.skipped }}" = "false"
+          test -n "${{ steps.lix.outputs.version }}"
+          test -x "${{ steps.lix.outputs.nix-path }}"
+
+          nix --version
+          nix doctor
+          test "$(nix eval --expr '1 + 1')" = "2"
+          nix config show access-tokens | grep -q 'example.com=lix-gha-installer-extra-config-works'
+          if [ "${{ github.server_url }}" = "https://github.com" ]; then
+            nix config show access-tokens | grep -q 'github.com='
+          fi
+          nix config show substituters | grep -q 'https://cache.lix.systems'
+          if [ -e /dev/kvm ]; then
+            test -r /dev/kvm && test -w /dev/kvm
+            nix config show system-features | grep -q 'kvm'
+          fi
+
+          if nix config show sandbox-paths 2>/dev/null | grep -q '/bin/sh' || [ "$(uname -s)" = "Darwin" ]; then
+            # shellcheck disable=SC2016
+            nix-build --no-out-link --expr '
+              derivation {
+                name = "nix-action-smoke";
+                system = builtins.currentSystem;
+                builder = "/bin/sh";
+                args = [ "-c" "echo ok > $out" ];
+              }
+            '
+          fi
+          nix-shell -p hello --run hello
+
+      - name: Re-run action on pre-installed runner
+        id: lix-reused
+        uses: ./
+        with:
+          extra-conf: |
+            max-jobs = 2
+
+      - name: Verify skip-if-installed and NIX_CONFIG overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.lix-reused.outputs.skipped }}" = "true"
+          test "${{ steps.lix-reused.outputs.cache-hit }}" = "skipped"
+          test "$(nix config show max-jobs)" = "2"
+
+  test-container:
+    name: Install Lix (container --init none)
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:24.04
+    steps:
+      - name: Install container prerequisites
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl xz-utils
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Lix in container
+        id: lix
+        uses: ./
+        with:
+          extra-conf: |
+            sandbox = false
+
+      - name: Verify container installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.lix.outputs.skipped }}" = "false"
+          nix --version
+          test ! -S /nix/var/nix/daemon-socket/socket
+          test "$(nix eval --expr '1 + 1')" = "2"
+
+  success:
+    name: Success
+    if: always()
+    needs:
+      - lint
+      - test
+      - test-container
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check job results
+        shell: bash
+        run: |
+          test "${{ needs.lint.result }}" = "success"
+          test "${{ needs.test.result }}" = "success"
+          test "${{ needs.test-container.result }}" = "success"

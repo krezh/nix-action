@@ -1,0 +1,92 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>krezh/renovate-config"],
+  "hostRules": [
+    {
+      "hostType": "forgejo",
+      "matchHost": "git.lix.systems"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track Lix releases",
+      "managerFilePatterns": ["/^distributions/lix\\.env$/"],
+      "matchStrings": [
+        "(?:^|\\n)LIX_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "forgejo-tags",
+      "registryUrlTemplate": "https://git.lix.systems",
+      "depNameTemplate": "lix-project/lix",
+      "packageNameTemplate": "lix-project/lix",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track lix-installer releases",
+      "managerFilePatterns": ["/^distributions/lix\\.env$/"],
+      "matchStrings": [
+        "(?:^|\\n)LIX_INSTALLER_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "forgejo-tags",
+      "registryUrlTemplate": "https://git.lix.systems",
+      "depNameTemplate": "lix-project/lix-installer",
+      "packageNameTemplate": "lix-project/lix-installer",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Lix release updates",
+      "matchPackageNames": ["lix-project/lix"],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
+      "semanticCommitScope": "lix",
+      "commitMessageTopic": "Lix",
+      "commitMessageExtra": "( {{currentVersion}} → {{newVersion}} )",
+      "postUpgradeTasks": {
+        "commands": ["bash .github/scripts/update-hash.sh"],
+        "fileFilters": ["distributions/lix.env"],
+        "executionMode": "update"
+      },
+      "automerge": true,
+      "automergeType": "pr",
+      "ignoreTests": false
+    },
+    {
+      "description": "Bump minor/major Lix updates as feat for release-please",
+      "matchPackageNames": ["lix-project/lix"],
+      "matchUpdateTypes": ["minor", "major"],
+      "semanticCommitType": "feat"
+    },
+    {
+      "description": "Bump patch Lix updates as fix for release-please",
+      "matchPackageNames": ["lix-project/lix"],
+      "matchUpdateTypes": ["patch"],
+      "semanticCommitType": "fix"
+    },
+    {
+      "description": "lix-installer release updates",
+      "matchPackageNames": ["lix-project/lix-installer"],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "installer",
+      "commitMessageTopic": "lix-installer",
+      "commitMessageExtra": "( {{currentVersion}} → {{newVersion}} )",
+      "postUpgradeTasks": {
+        "commands": ["bash .github/scripts/update-hash.sh"],
+        "fileFilters": ["distributions/lix.env"],
+        "executionMode": "update"
+      },
+      "automerge": true,
+      "automergeType": "pr",
+      "ignoreTests": false
+    },
+    {
+      "description": "Auto-merge GitHub Actions updates after CI",
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "automergeType": "pr",
+      "ignoreTests": false
+    }
+  ]
+}
